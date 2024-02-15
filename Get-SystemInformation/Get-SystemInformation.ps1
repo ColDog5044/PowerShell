@@ -108,7 +108,3 @@ function Get-SystemInformation {
         Write-Output "Output has been dumped to $OutputFile"
     }
 }
-
-# Example usage:
-# Get-SystemInformation -OutputFile "system_info.txt"
-# Get-SystemInformation -Memory
