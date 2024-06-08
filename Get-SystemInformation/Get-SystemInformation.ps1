@@ -1,155 +1,155 @@
-function Get-SystemInfo {
-    [CmdletBinding()]
-    param(
-        [switch]$Processor,
-        [switch]$Memory,
-        [switch]$Graphics,
-        [switch]$Disk,
-        [switch]$Network,
-        [switch]$System
-    )
+# Get Computer Information
+$ComputerInformation = Get-WmiObject -Class Win32_ComputerSystem
+$OS = Get-WmiObject -Class Win32_OperatingSystem
+Write-Output "Domain: $ComputerInformation.Domain"
+Write-Output "Manufacturer: $ComputerInformation.Manufacturer"
+Write-Output "Model: $ComputerInformation.Model"
+Write-Output "Computer Name: $ComputerInformation.Name"
+Write-Output "Operating System: $($OS.Caption), Version: $($OS.Version)"
 
-    # Determine the operating system
-    if ($env:OS -like 'Windows*') {
-        $OperatingSystem = "Windows"
-    } elseif ($IsLinux -eq $true) {
-        $OperatingSystem = "Linux"
-    } else {
-        $OperatingSystem = "Unknown"
-    }
+# Get CPU Information
+$CPU = Get-WmiObject -Class Win32_Processor
+Write-Output "CPU: $($CPU.Name), Cores: $($CPU.NumberOfCores), Threads: $($CPU.ThreadCount)"
 
-    # Define an empty hashtable to store system information
-    $SystemInfo = @{}
+# Get GPU Information
+$GPU = Get-WmiObject -Class Win32_VideoController
+Write-Output "GPU: $($GPU.Name)"
+Write-Output "Video Processor: $($GPU.VideoProcessor)"
+Write-Output "Driver Version: $($GPU.DriverVersion)"
+Write-Output "Current Refresh Rate: $($GPU.CurrentRefreshRate)"
 
-    # Function to get BIOS information
-    function Get-BIOSInfo {
-        if ($OperatingSystem -eq "Windows") {
-            $biosInfo = Get-WmiObject -Class Win32_BIOS
-            $SystemInfo.Add("BIOS", @{
-                "Manufacturer" = $biosInfo.Manufacturer
-                "Version" = $biosInfo.SMBIOSBIOSVersion
-                "ReleaseDate" = $biosInfo.ReleaseDate
-            })
-        }
-    }
+# Get RAM Information
+$RAM = Get-WmiObject -Class Win32_ComputerSystem
+Write-Output "Total Physical Memory (RAM): $($RAM.TotalPhysicalMemory / 1GB) GB"
 
-    # Function to get operating system information
-    function Get-OSInfo {
-        if ($OperatingSystem -eq "Windows") {
-            $osInfo = Get-WmiObject -Class Win32_OperatingSystem
-            $SystemInfo.Add("OperatingSystem", @{
-                "Caption" = $osInfo.Caption
-                "Version" = $osInfo.Version
-                "BuildNumber" = $osInfo.BuildNumber
-            })
-        } elseif ($OperatingSystem -eq "Linux") {
-            $SystemInfo.Add("OperatingSystem", @{
-                "Kernel" = "$(uname -s)"
-                "KernelVersion" = "$(uname -r)"
-            })
-        }
-    }
+# Get Disk Information
+$Disks = Get-WmiObject -Class Win32_LogicalDisk
+foreach ($d in $Disks) {
+    $FreeSpaceGB = [math]::Round($d.FreeSpace / 1GB, 2)
+    $SizeGB = [math]::Round($d.Size / 1GB, 2)
+    Write-Output "Disk $($d.DeviceID): Total Size: $SizeGB GB, Free Space: $FreeSpaceGB GB"
+}
 
-    # Function to get processor information
-    function Get-ProcessorInfo {
-        if ($OperatingSystem -eq "Windows") {
-            $processorInfo = Get-WmiObject -Class Win32_Processor
-            $SystemInfo.Add("Processor", @{
-                "Name" = $processorInfo.Name
-                "NumberOfCores" = $processorInfo.NumberOfCores
-                "MaxClockSpeed(GHz)" = "{0:N2}" -f ($processorInfo.MaxClockSpeed / 1GB)
-            })
-        } elseif ($OperatingSystem -eq "Linux") {
-            $processorInfo = $(grep 'model name' /proc/cpuinfo | sort -u | awk -F': ' '{print $2}')
-            $SystemInfo.Add("Processor", @{
-                "Name" = $processorInfo
-            })
-        }
-    }
+# Get Physical Disk (SMART) Information
+$PhysicalDisks = Get-WmiObject -Class Win32_DiskDrive
+foreach ($pd in $PhysicalDisks) {
+    $SmartStatus = if ($pd.SmartStatus -eq "OK") { "Healthy" } else { "Unhealthy" }
+    Write-Output "Physical Disk $($pd.DeviceID): Model: $($pd.Model), SMART Status: $SmartStatus"
+}
 
-    # Function to get memory information
-    function Get-MemoryInfo {
-        if ($OperatingSystem -eq "Windows") {
-            $memoryInfo = Get-WmiObject -Class Win32_PhysicalMemory
-            $TotalMemoryGB = ($memoryInfo | Measure-Object -Property Capacity -Sum).Sum / 1GB
-            $SystemInfo.Add("Memory", @{
-                "TotalMemory(GB)" = "{0:N2}" -f $TotalMemoryGB
-            })
-        } elseif ($OperatingSystem -eq "Linux") {
-            $memoryInfo = $(grep MemTotal /proc/meminfo | awk '{print $2}')
-            $TotalMemoryGB = $memoryInfo / 1024 / 1024
-            $SystemInfo.Add("Memory", @{
-                "TotalMemory(GB)" = "{0:N2}" -f $TotalMemoryGB
-            })
-        }
-    }
+# Get Network Information
+$Network = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -Filter "IPEnabled = TRUE"
+foreach ($n in $Network) {
+    Write-Output "Network Adapter: $($n.Description), IP Address: $($n.IPAddress)"
+}
 
-    function Get-GraphicsInfo {
-        if ($OperatingSystem -eq "Windows") {
-            $graphicsInfo = Get-WmiObject -Class Win32_VideoController
-            $GraphicsList = @()
-            foreach ($graphics in $graphicsInfo) {
-                $GraphicsList += @{
-                    "Name" = $graphics.Name
-                    "AdapterRAM(MB)" = "{0:N2}" -f ($graphics.AdapterRAM / 1MB)
-                    "DriverVersion" = $graphics.DriverVersion
-                }
-            }
-            $SystemInfo.Add("Graphics", $GraphicsList)
-        }
-    }
-    
-    function Get-DiskInfo {
-        if ($OperatingSystem -eq "Windows") {
-            $diskInfo = Get-WmiObject -Class Win32_DiskDrive
-            $DiskList = @()
-            foreach ($disk in $diskInfo) {
-                $DiskList += @{
-                    "Model" = $disk.Model
-                    "Size(GB)" = "{0:N2}" -f ($disk.Size / 1GB)
-                    "InterfaceType" = $disk.InterfaceType
-                }
-            }
-            $SystemInfo.Add("Disk", $DiskList)
-        }
-    }
-    
-    function Get-NetworkInfo {
-        if ($OperatingSystem -eq "Windows") {
-            $networkInfo = Get-WmiObject -Class Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled }
-            $NetworkList = @()
-            foreach ($network in $networkInfo) {
-                $NetworkList += @{
-                    "Adapter" = $network.Description
-                    "IPAddress" = $network.IPAddress -join ","
-                    "MACAddress" = $network.MACAddress
-                }
-            }
-            $SystemInfo.Add("Network", $NetworkList)
-        }
-    }    
+# Get BIOS Information
+$BIOS = Get-WmiObject -Class Win32_BIOS
+Write-Output "BIOS: $($BIOS.Manufacturer), Version: $($BIOS.SMBIOSBIOSVersion), Serial Number: $($BIOS.SerialNumber)"
 
-    # Call functions based on specified parameters
-    if ($System) { Get-OSInfo }
-    if ($Processor) { Get-ProcessorInfo }
-    if ($Memory) { Get-MemoryInfo }
-    if ($Graphics) { Get-GraphicsInfo }
-    if ($Disk) { Get-DiskInfo }
-    if ($Network) { Get-NetworkInfo }
-    if (-not ($System -or $Processor -or $Memory -or $Graphics -or $Disk -or $Network)) {
-        Get-BIOSInfo
-        Get-OSInfo
-        Get-ProcessorInfo
-        Get-MemoryInfo
-        Get-GraphicsInfo
-        Get-DiskInfo
-        Get-NetworkInfo
-    }
+# Get Motherboard Information
+$Motherboard = Get-WmiObject -Class Win32_BaseBoard
+Write-Output "Motherboard: $($Motherboard.Manufacturer), Product: $($Motherboard.Product), Serial Number: $($Motherboard.SerialNumber)"
 
-    # Generate the filename with current date and time
-    $DateTime = Get-Date -Format "yyyy-MM-dd-HH-mm-ss"
-    $FileName = "$DateTime.json"
+# Get Monitor Information
+$Monitor = Get-WmiObject -Class Win32_DesktopMonitor
+Write-Output "Monitor: $($Monitor.Name), Screen Resolution: $($Monitor.ScreenWidth)x$($Monitor.ScreenHeight)"
 
-    # Export system information to JSON file
-    $SystemInfo | ConvertTo-Json | Out-File -FilePath $FileName
+# Get Printer Information
+#$Printer = Get-WmiObject -Class Win32_Printer
+#foreach ($p in $Printer) {
+#    Write-Output "Printer: $($p.Name), Status: $($p.Status)"
+#}
+
+# Get Software Information
+#$Software = Get-WmiObject -Class Win32_Product
+#foreach ($s in $Software) {
+#    Write-Output "Software: $($s.Name), Version: $($s.Version)"
+#}
+
+# Get User Account Information
+$UserAccounts = Get-WmiObject -Class Win32_UserAccount
+$EnabledAccounts = $UserAccounts | Where-Object { $_.Disabled -eq $false }
+$DisabledAccounts = $UserAccounts | Where-Object { $_.Disabled -eq $true }
+
+Write-Output "Enabled User Accounts:"
+foreach ($u in $EnabledAccounts) {
+    Write-Output "User Account: $($u.Name)"
+}
+
+Write-Output "Disabled User Accounts:"
+foreach ($u in $DisabledAccounts) {
+    Write-Output "User Account: $($u.Name)"
+}
+
+# Get Accounts in the Administrator Group
+$AdminGroup = Get-WmiObject -Class Win32_Group -Filter "Name='Administrators'"
+$AdminGroupUsers = Get-WmiObject -Class Win32_GroupUser -Filter "GroupComponent=`"Win32_Group.Domain='$($AdminGroup.Domain)',Name='$($AdminGroup.Name)'`""
+Write-Output "Accounts in the Administrator Group:"
+foreach ($u in $AdminGroupUsers) {
+    $User = ($u.PartComponent -split (",")[1]).Replace("`"", "")
+    Write-Output "User Account: $User"
+}
+
+# Get Network Interface Information
+#$NetworkInterface = Get-WmiObject -Class Win32_NetworkAdapter
+#foreach ($ni in $NetworkInterface) {
+#    Write-Output "Network Interface: $($ni.Name), Status: $($ni.Status)"
+#}
+
+# Get Battery Information
+$Battery = Get-WmiObject -Class Win32_Battery
+if ($Battery) {
+    Write-Output "Battery: $($Battery.Name)"
+    Write-Output "Status: $($Battery.Status)"
+    Write-Output "Battery Full Charged Capacity: $($Battery.FullChargeCapacity)"
+    Write-Output "Battery Current Capacity: $($Battery.EstimatedChargeRemaining)"
+    Write-Output "Battery Health: $(($Battery.EstimatedChargeRemaining/$Battery.FullChargeCapacity)*100)%"
+    Write-Output "Battery Life Time: $($Battery.ExpectedLife)"
+    Write-Output "Battery Voltage: $($Battery.Voltage)"
+}
+
+# Get System Uptime
+$UptimeInSeconds = (Get-WmiObject -Class Win32_PerfFormattedData_PerfOS_System).SystemUpTime
+$Uptime = [TimeSpan]::FromSeconds($UptimeInSeconds)
+Write-Output "System Uptime: $($Uptime.ToString('hh\:mm\:ss'))"
+
+# Get Performance Data
+$CPUUsage = (Get-WmiObject -Class Win32_PerfFormattedData_PerfOS_Processor | Where-Object { $_.Name -eq "_Total" }).PercentProcessorTime
+$MemoryUsage = (Get-WmiObject -Class Win32_PerfFormattedData_PerfOS_Memory).PercentCommittedBytesInUse
+
+# Get Disk Read/Write in MB
+$DiskRead = [Math]::Round((Get-Counter -Counter "\LogicalDisk(_Total)\Disk Read Bytes/sec").CounterSamples.CookedValue / 1MB, 2)
+$DiskWrite = [Math]::Round((Get-Counter -Counter "\LogicalDisk(_Total)\Disk Write Bytes/sec").CounterSamples.CookedValue / 1MB, 2)
+
+# Get Network Download/Upload in MB/sec
+$NetworkDownload = [Math]::Round(((Get-Counter -Counter "\Network Interface(*)\Bytes Received/sec").CounterSamples | Where-Object { $_.InstanceName -eq 'your_network_interface' } | Select-Object -ExpandProperty CookedValue) / 1MB, 2)
+$NetworkUpload = [Math]::Round(((Get-Counter -Counter "\Network Interface(*)\Bytes Sent/sec").CounterSamples | Where-Object { $_.InstanceName -eq 'your_network_interface' } | Select-Object -ExpandProperty CookedValue) / 1MB, 2)
+
+Write-Output "Average CPU Usage: $($CPUUsage)% , Memory Usage: $($MemoryUsage)% , Disk Read: $($DiskRead) MB/sec, Disk Write: $($DiskWrite) MB/sec, Network Download: $($NetworkDownload) MB/sec, Network Upload: $($NetworkUpload) MB/sec"
+
+# Get Security Settings
+# Get Firewall Status
+$FirewallProfiles = Get-NetFirewallProfile
+foreach ($fp in $FirewallProfiles) {
+    Write-Output "Firewall Profile: $($fp.Name), Enabled: $($fp.Enabled)"
+}
+
+# Get Windows Defender Status
+$DefenderService = Get-Service -Name WinDefend
+Write-Output "Windows Defender Status: $($DefenderService.Status)"
+
+# Get UAC Status
+$UAC = (Get-ItemProperty -Path HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System).EnableLUA
+if ($UAC -eq 1) {
+    Write-Output "User Account Control (UAC): Enabled"
+}
+else {
+    Write-Output "User Account Control (UAC): Disabled"
+}
+
+# Get Scheduled Tasks
+$ScheduledJobs = Get-WmiObject -Class Win32_ScheduledJob
+foreach ($j in $ScheduledJobs) {
+    Write-Output "Scheduled Job: $($j.JobId), Command: $($j.Command), Next Run Time: $($j.NextRunTime)"
 }
